@@ -323,7 +323,9 @@ func (p pair) String() string {
 // pair can also implement http.Handler, making it a web server endpoint.
 // This demonstrates how one type can satisfy multiple interfaces.
 func (p pair) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(fmt.Sprintf("Pair values: %s", p.String())))
+	if _, err := fmt.Fprintf(w, "Pair values: %s", p.String()); err != nil {
+		slog.Error("failed to write response", "err", err)
+	}
 }
 
 func learnInterfaces() {
@@ -466,7 +468,9 @@ func learnWebProgramming() {
 	}()
 
 	// Make a request to demonstrate the server works.
-	requestServer()
+	if err := requestServer(); err != nil {
+		logger.Error("request failed", "err", err)
+	}
 
 	// Graceful shutdown with context timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -481,13 +485,15 @@ func learnWebProgramming() {
 	}
 }
 
-func requestServer() {
+func requestServer() error {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 
 	// Retry loop waiting for server to start.
+	var lastErr error
 	for range 20 {
 		resp, err := client.Get("http://127.0.0.1:8080/hello/Gopher")
 		if err != nil {
+			lastErr = err
 			time.Sleep(25 * time.Millisecond)
 			continue
 		}
@@ -496,13 +502,12 @@ func requestServer() {
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			fmt.Println("read failed:", err)
-			return
+			return fmt.Errorf("reading response body: %w", err)
 		}
 
 		fmt.Printf("web server said: %q\n", string(body))
-		return
+		return nil
 	}
 
-	fmt.Println("server did not start in time")
+	return fmt.Errorf("server did not start in time: %w", lastErr)
 }
