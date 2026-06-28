@@ -35,6 +35,7 @@ import (
 	m "math"   // Math library with a local alias 'm'
 	"net/http" // Production-ready web server
 	"os"       // Operating system interface
+	"regexp"   // Regular expressions for input validation
 	"slices"   // Type-safe slice utility functions (Go 1.21+)
 	"strconv"  // String conversions
 	"time"     // Time and duration utilities
@@ -439,8 +440,15 @@ func learnWebProgramming() {
 	mux := http.NewServeMux()
 
 	// Method and path pattern with parameter extraction.
+	var validName = regexp.MustCompile(`^[\p{L}\p{N} .'-]{1,64}$`)
+
 	mux.HandleFunc("GET /hello/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
+		if !validName.MatchString(name) {
+			http.Error(w, "invalid name", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = io.WriteString(w, fmt.Sprintf("Hello, %s!\n", name))
 	})
 
@@ -453,6 +461,8 @@ func learnWebProgramming() {
 		Addr:              "127.0.0.1:8080",
 		Handler:           mux,
 		ReadHeaderTimeout: 2 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
