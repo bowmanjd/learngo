@@ -26,7 +26,6 @@ package main
 // Import declaration declares standard library or third-party packages referenced in this file.
 import (
 	"cmp"      // Ordered comparison types (Go 1.21+)
-	"context"  // Cancellation and timeout propagation
 	"errors"   // Error wrapping and inspection
 	"fmt"      // Formatting and I/O standard package
 	"io"       // Core I/O interfaces (replaces deprecated io/ioutil)
@@ -45,8 +44,19 @@ func main() {
 	// Println outputs a line to stdout.
 	fmt.Println("Hello world!")
 
-	// Call another function within this package.
+	// Each function demonstrates a different Go concept.
+	// Calling them sequentially from main keeps the control flow
+	// in one place rather than chaining each function to the next.
 	beyondHello()
+	learnTypes()
+	learnFlowControl()
+	learnFunctionFactory()
+	learnDefer()
+	learnInterfaces()
+	learnVariadicParams("great", "learning", "here!")
+	learnErrorHandling()
+	learnConcurrency()
+	learnWebProgramming()
 }
 
 // Functions declare parameters in parentheses.
@@ -59,8 +69,6 @@ func beyondHello() {
 	sum, prod := learnMultiple(x, y) // Functions can return multiple values.
 	fmt.Println("sum:", sum, "prod:", prod)
 	fmt.Println("named return:", learnNamedReturns(x, y))
-
-	learnTypes()
 }
 
 /*
@@ -140,8 +148,6 @@ literal can include line breaks.` // Same string type.
 
 	// To satisfy compiling constraints, print our arrays and slices:
 	fmt.Println(a4, s4, d2, bs)
-
-	learnFlowControl()
 }
 
 func expensiveComputation() int {
@@ -253,8 +259,6 @@ func learnFlowControl() {
 	// Demonstrate learning memory features
 	p, q := learnMemory()
 	fmt.Println("Pointers values:", *p, *q)
-
-	learnFunctionFactory()
 }
 
 func learnFunctionFactory() {
@@ -264,8 +268,6 @@ func learnFunctionFactory() {
 	d := sentenceFactory("summer")
 	fmt.Println(d("A beautiful", "day!"))
 	fmt.Println(d("A lazy", "afternoon!"))
-
-	learnDefer()
 }
 
 // sentenceFactory returns a closure that captures mystring.
@@ -284,8 +286,6 @@ func learnDefer() {
 
 	// Common use: closing resources near where they're opened.
 	fmt.Println("normal execution: runs before all defers")
-
-	learnInterfaces()
 }
 
 // Custom Range-over-func Iterator (Go 1.23+).
@@ -323,7 +323,7 @@ func (p pair) String() string {
 // pair can also implement http.Handler, making it a web server endpoint.
 // This demonstrates how one type can satisfy multiple interfaces.
 func (p pair) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(fmt.Sprintf("Pair values: %s", p.String())))
+	writeResponse(w, "Pair values: %s", p.String())
 }
 
 func learnInterfaces() {
@@ -353,8 +353,6 @@ func learnInterfaces() {
 	// Testing generics function
 	fmt.Println("Generics Max Int:", learnGenerics(10, 20))
 	fmt.Println("Generics Max String:", learnGenerics("apple", "banana"))
-
-	learnVariadicParams("great", "learning", "here!")
 }
 
 // Functions can have variadic parameters (variable number of arguments).
@@ -365,8 +363,6 @@ func learnVariadicParams(myStrings ...any) {
 
 	// Pass variadic values to another variadic function using ...
 	fmt.Println("spread to Sprintln:", fmt.Sprintln(myStrings...))
-
-	learnErrorHandling()
 }
 
 func learnErrorHandling() {
@@ -379,9 +375,8 @@ func learnErrorHandling() {
 	}
 
 	// Most functions that can fail return an error as the last return value.
-	if _, err := strconv.Atoi("non-int"); err != nil {
-		fmt.Println("Atoi error:", err)
-	}
+	_, err := strconv.Atoi("non-int")
+	logErr("Atoi error:", err)
 
 	// Use errors.Is to check for specific error types (Go 1.13+).
 	if _, err := os.ReadFile("definitely-missing.txt"); err != nil {
@@ -389,8 +384,6 @@ func learnErrorHandling() {
 			fmt.Println("missing file detected with errors.Is")
 		}
 	}
-
-	learnConcurrency()
 }
 
 // inc demonstrates a send-only channel parameter.
@@ -428,8 +421,6 @@ func learnConcurrency() {
 	case <-ccs:
 		fmt.Println("didn't happen — channel is empty")
 	}
-
-	learnWebProgramming()
 }
 
 func learnWebProgramming() {
@@ -441,7 +432,7 @@ func learnWebProgramming() {
 	// Method and path pattern with parameter extraction.
 	mux.HandleFunc("GET /hello/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
-		_, _ = io.WriteString(w, fmt.Sprintf("Hello, %s!\n", name))
+		writeResponse(w, "Hello, %s!\n", name)
 	})
 
 	// Any type implementing http.Handler can be used directly.
@@ -455,28 +446,15 @@ func learnWebProgramming() {
 		ReadHeaderTimeout: 2 * time.Second,
 	}
 
-	errCh := make(chan error, 1)
-
-	go func() {
-		logger.Info("starting demo server", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-		close(errCh)
-	}()
+	errCh := startServer(srv, logger)
 
 	// Make a request to demonstrate the server works.
 	requestServer()
 
-	// Graceful shutdown with context timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
+	// Graceful shutdown using the shared utility.
+	logErr("shutdown error:", shutdownServer(srv, time.Second))
 
-	if err := srv.Shutdown(ctx); err != nil {
-		fmt.Println("shutdown error:", err)
-	}
-
-	if err, ok := <-errCh; ok && err != nil {
+	if err, ok := <-errCh; ok {
 		logger.Error("server error", "err", err)
 	}
 }
@@ -495,8 +473,7 @@ func requestServer() {
 		// Read and close body explicitly — don't use defer inside a loop.
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil {
-			fmt.Println("read failed:", err)
+		if logErr("read failed:", err) {
 			return
 		}
 
