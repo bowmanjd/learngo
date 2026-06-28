@@ -58,12 +58,16 @@ func beyondHello() {
 	y := 4
 	sum, prod := learnMultiple(x, y) // Functions can return multiple values.
 	fmt.Println("sum:", sum, "prod:", prod)
+	fmt.Println("named return:", learnNamedReturns(x, y))
 
 	learnTypes()
 }
 
-/* Go functions can have multiple parameters and multiple return values.
-   In this case, x and y are input parameters, sum and prod are named return values. */
+/*
+Go functions can have multiple parameters and multiple return values.
+
+	In this case, x and y are input parameters, sum and prod are named return values.
+*/
 func learnMultiple(x, y int) (sum, prod int) {
 	return x + y, x * y // Return statement returns multiple values.
 }
@@ -115,7 +119,7 @@ literal can include line breaks.` // Same string type.
 	s3Copy := s3
 	s3Copy[0] = 0
 	fmt.Println("slices share storage:", s3Copy[0] == s3[0]) // true
-	s3[0] = 4 // Restore original value for later use.
+	s3[0] = 4                                                // Restore original value for later use.
 
 	// Because slices are dynamic, elements can be appended:
 	s3 = append(s3, 12, 13) // Append elements and reassign to s3.
@@ -145,19 +149,24 @@ func expensiveComputation() int {
 }
 
 // Go features automatic garbage collection. It has pointers, but no pointer arithmetic.
-// Go 1.26 introduces expression-based "new", letting you initialize pointers inline.
-func learnMemory() (p, q *int) {
-	// Standard new(Type) allocates zero-initialized memory.
-	p = new(int)
+// Unlike C, returning the address of a local variable is safe — Go manages the lifetime.
+func learnMemory() (*int, *int) {
+	// new(Type) allocates zero-initialized memory and returns a pointer.
+	p := new(int)
+	*p = 7 // Dereference to assign.
 
-	// Go 1.26+ supports expression-based new(). You can pass a value directly
-	// to allocate and initialize a pointer in a single expression!
-	q = new(42)  // Allocates memory for an int and initializes it to 42.
+	// Go 1.26+ supports expression-based new(). Pass a value directly
+	// to allocate and initialize a pointer in a single expression.
+	q := new(-2)
 
-	s := make([]int, 20) // Allocates 20 ints in a contiguous memory block.
-	s[3] = 7             // Assigns a value to index 3.
-	r := -2              // Local variable.
-	return &s[3], &r     // '&' operator retrieves the memory address of a variable.
+	// make() allocates slices, maps, and channels (not pointers).
+	s := make([]int, 20)
+	s[0] = 99
+
+	// '&' takes the address of any addressable value.
+	fmt.Println("slice element address:", &s[0])
+
+	return p, q
 }
 
 func learnFlowControl() {
@@ -435,9 +444,9 @@ func learnWebProgramming() {
 		_, _ = io.WriteString(w, fmt.Sprintf("Hello, %s!\n", name))
 	})
 
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, "You learned modern Go!\n")
-	})
+	// Any type implementing http.Handler can be used directly.
+	// pair implements ServeHTTP, so it satisfies http.Handler.
+	mux.Handle("GET /pair", pair{3, 4})
 
 	// Configure server with timeouts (security best practice).
 	srv := &http.Server{
@@ -482,9 +491,10 @@ func requestServer() {
 			time.Sleep(25 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 
+		// Read and close body explicitly — don't use defer inside a loop.
 		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			fmt.Println("read failed:", err)
 			return
